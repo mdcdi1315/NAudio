@@ -47,6 +47,7 @@ Docs/Architecture/ReleaseStrategy.md for the release-notes process.
  * **ALSA (Linux):** new `NAudio.Alsa` package — `AlsaOut` (`IWavePlayer`) and `AlsaIn` (`IWaveIn`) backed by `libasound`, plus `AlsaDeviceEnumerator`. Linux-only (`[SupportedOSPlatform("linux")]`, AOT-compatible `[LibraryImport]`); reference it explicitly, it is not part of the `NAudio` meta-package (#1182)
  * **Docs:** added `WasapiPlayer` and `WasapiRecorder` tutorials; the legacy `WasapiOut` and `WasapiLoopbackCapture` docs now point to them
  * **Core:** `NAudio.Utils.HResult` gained constants for common COM/storage HRESULTs plus an `IsError` helper (#1288)
+ * **Sample providers:** new `ChannelMixerSampleProvider` remixes a source's channels through an arbitrary mixing matrix (downmix, upmix, weighted routing), with ready-made matrices in `ChannelMixMatrix` (mono↔stereo, stereo→5.1, etc.). Thanks to @antiduh (#982)
 
 #### Demo apps and Test Harnesses
 
@@ -72,6 +73,7 @@ Docs/Architecture/ReleaseStrategy.md for the release-notes process.
  * `AudioSessionControl`: now supports multiple registered event clients. `RegisterEventClient` no longer leaks a prior registration, and `UnRegisterEventClient` now honours its `eventClient` argument instead of unregistering whichever handler happened to be stored (#1263)
  * `CueListInterpreter`: fixed returning null for WAV files with cue points but no labels (e.g. unnamed Wavosaur markers); cues are now returned with empty labels (#549)
  * `WaveViewer`: fixed waveform rendering upside-down (#801, #818)
+ * `WaveViewer`: now renders correctly for any source format — the legacy renderer hard-coded a 16-bit PCM byte walk, so feeding it an `AudioFileReader` (or any non-16-bit `WaveStream`) produced a garbled waveform. Rendering now goes through `ToSampleProvider()` and operates on floats (#564)
  * `AcmInterop`: serialised all `msacm32` P/Invokes process-wide via a reentrant lock — fixes process-killing access violations under concurrent ACM access
  * `AcmStream`: fixed double-close in finalizer by zeroing the handle field before close
  * `MediaFoundationReader`: informational source-reader flags (`STREAMTICK`, `NEWSTREAM`, `NativeMediaTypeChanged`, `AllEffectsRemoved`) are now non-fatal instead of aborting reads
@@ -79,6 +81,7 @@ Docs/Architecture/ReleaseStrategy.md for the release-notes process.
  * `MediaFoundationEncoder`: unselected `MediaType` instances are now disposed to prevent finalizer-thread COM ref leaks
  * `StreamMediaFoundationReader` and stream-based `MediaFoundationEncoder` encoding now use a direct managed `IMFByteStream` wrapper instead of the `IStream`→`IMFByteStream` shim, improving reliability of reading and encoding audio through .NET streams (#1288)
  * `Mp3FileReader`: fixed false sample-rate-change errors near end of file
+ * `WaveFormat.Serialize`: PCM formats now write the canonical 16-byte `fmt ` chunk (no `cbSize` field) instead of 18 bytes, matching the `PCMWAVEFORMAT` layout (#934, #1098)
  * MP3 frame parsing: more robust against false frame detections from album art and trailing metadata
  * `MidiFile`: preserved running-status across meta events (fixes "Read too far" errors when meta events interrupt running-status sequences)
  * `WaveStream.CurrentTime` setter: now lands on a block boundary, preventing garbage audio on seek in custom readers
@@ -101,6 +104,8 @@ Docs/Architecture/ReleaseStrategy.md for the release-notes process.
  * `Id3v2Tag.ReadTag`: no longer throws and catches a `FormatException` for MP3 streams without an ID3v2 tag — the header check now returns `null` directly (#265)
  * `WaveFileReader`: fixed `ArgumentException` reading WAV files whose `fmt` chunk declares more extra (`cbSize`) bytes than the fixed 100-byte buffer holds — the surplus is now discarded instead of throwing (#482)
  * `MediaFoundationTransform`: cleanup `finally` blocks no longer leak COM objects when `Unlock`/`RemoveAllBuffers` fails — hresults are captured and thrown only after every buffer/sample has been released (#1293)
+ * `ResamplerDmoStream`: fixed infinite loop on `Read` after setting `Position`, and the loss of the resampler kernel's tail samples (~32 at the default quality of 30) when the input reaches end-of-stream. The DMO is now drained via `ProcessOutput` after `Discontinuity` — on seek the drained bytes are discarded so playback resumes from the new position, on EOS they're returned to the caller and subsequent reads return 0 cleanly (#607, #608)
+ * Named the background threads created by `DirectSoundOut`, `WasapiOut`, `WasapiCapture`, `WasapiPlayer`, and `WasapiRecorder` so they show meaningful names in debuggers and profilers (#557)
 
 #### Modernisation (Native AOT, source-generated COM)
 
