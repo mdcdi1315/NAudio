@@ -26,6 +26,9 @@ public partial class CoreAudioPlayer
         // after AudioDeviceStart returns, because the device has not produced a
         // valid timestamp at that point.
         private double firstSampleTime = double.NaN;
+        // The most recent figure computed from a valid timestamp, held so that
+        // an invalid one reports no movement rather than a jump backwards.
+        private double lastPlayedFrames;
 
         public PlayerProcedure(AudioDevice dev)
             : base(dev)
@@ -77,15 +80,30 @@ public partial class CoreAudioPlayer
         {
             get
             {
-                if (double.IsNaN(firstSampleTime)) { return 0d; }
+                // The baseline is only taken from a timestamp that declared its
+                // sample time valid, and the same has to hold for the reading
+                // measured against it. Core Audio can hand out a timestamp
+                // without a valid sample time across a start or stop, and
+                // subtracting from that would send the position backwards.
+                if (double.IsNaN(firstSampleTime) ||
+                    !nowStamp.mFlags.HasFlag(AudioTimeStampFlags.kAudioTimeStampSampleTimeValid))
+                {
+                    return lastPlayedFrames;
+                }
+
                 double played = nowStamp.mSampleTime - firstSampleTime;
-                return played > 0d ? played : 0d;
+                lastPlayedFrames = played > 0d ? played : 0d;
+                return lastPlayedFrames;
             }
         }
 
         // Starts the frame count again from the next cycle. Called when a new
         // run begins, so that a run counts from its own beginning.
-        public void RestartFrameCount() => firstSampleTime = double.NaN;
+        public void RestartFrameCount()
+        {
+            firstSampleTime = double.NaN;
+            lastPlayedFrames = 0d;
+        }
 
         // The actual implementation that reads from a given 
         // source provider and transfers it's data to the HAL. 
