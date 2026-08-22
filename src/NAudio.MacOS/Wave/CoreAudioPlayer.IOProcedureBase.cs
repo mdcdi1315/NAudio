@@ -19,6 +19,13 @@ public partial class CoreAudioPlayer
         private IPlayerSource source;
         private bool shouldStopInNextCall;
         private AudioTimeStamp nowStamp, outTimeStamp;
+        // The device's sample time on the first cycle of the current run. The
+        // device clock counts from whenever the device itself started, which is
+        // not when this player started, so it only becomes a position once it
+        // is measured against where this run began. Taken here rather than
+        // after AudioDeviceStart returns, because the device has not produced a
+        // valid timestamp at that point.
+        private double firstSampleTime = double.NaN;
 
         public PlayerProcedure(AudioDevice dev)
             : base(dev)
@@ -55,7 +62,30 @@ public partial class CoreAudioPlayer
             // (which we do so), inOutputTime is always valid.
             nowStamp = *(AudioTimeStamp*)inNow.ToPointer();
             outTimeStamp = *(AudioTimeStamp*)inOutputTime.ToPointer();
+
+            if (double.IsNaN(firstSampleTime) &&
+                nowStamp.mFlags.HasFlag(AudioTimeStampFlags.kAudioTimeStampSampleTimeValid))
+            {
+                firstSampleTime = nowStamp.mSampleTime;
+            }
         }
+
+        // Frames the device has played since this run began, or 0 before the
+        // first cycle has been seen. Survives the device stopping at the end of
+        // the source, because the last timestamp stays put.
+        public double PlayedFrames
+        {
+            get
+            {
+                if (double.IsNaN(firstSampleTime)) { return 0d; }
+                double played = nowStamp.mSampleTime - firstSampleTime;
+                return played > 0d ? played : 0d;
+            }
+        }
+
+        // Starts the frame count again from the next cycle. Called when a new
+        // run begins, so that a run counts from its own beginning.
+        public void RestartFrameCount() => firstSampleTime = double.NaN;
 
         // The actual implementation that reads from a given 
         // source provider and transfers it's data to the HAL. 

@@ -317,23 +317,30 @@ public sealed partial class CoreAudioPlayer : IWavePlayer, IWaveLatency, IWavePo
     public AudioDevice Device => selectedDevice;
 
     /// <inheritdoc />
+    // Bytes played in runs of this playback that have already finished. Pause
+    // adds to it so that a following Play carries on counting; Stop clears it,
+    // because the next Play is a new playback. This mirrors WaveOut, where
+    // waveOutReset clears the position and waveOutPause does not.
+    private long positionAccumulatedBytes;
+
+    // Bytes played by the run currently in progress.
+    private long CurrentRunBytes()
+    {
+        if (ioProcedure is null) { return 0L; }
+        var streamFormat = OutputWaveFormat;
+        long position = (long)(ioProcedure.PlayedFrames * streamFormat.BlockAlign);
+        long drift = position % streamFormat.BlockAlign;
+        if (drift > 0L) { position += streamFormat.BlockAlign - drift; }
+        return position;
+    }
+
+    /// <inheritdoc />
     public long GetPosition()
     {
         // The below function call is not required; it is implicitly 
         // handled by the call of OutputWaveFormat property.
         // ThrowIfInvalidOrDisposed();
-        var streamFormat = OutputWaveFormat;
-        try
-        {
-            long position = (long)(CoreAudioFunctions.GetCurrentDeviceTime(selectedDevice, streamFormat) * streamFormat.AverageBytesPerSecond);
-            long drift = position % streamFormat.BlockAlign;
-            if (drift > 0L) { position += streamFormat.BlockAlign - drift; }
-            return position;
-        }
-        catch (InvalidOperationException) // Device not running
-        {
-            return 0L;
-        }
+        return positionAccumulatedBytes + CurrentRunBytes();
     }
 
     /// <summary>
@@ -382,6 +389,9 @@ public sealed partial class CoreAudioPlayer : IWavePlayer, IWaveLatency, IWavePo
     public void Pause()
     {
         ThrowIfInvalidOrDisposed();
+        // Bank what this run played, so a following Play continues the count.
+        positionAccumulatedBytes += CurrentRunBytes();
+        ioProcedure.RestartFrameCount();
         ioProcedure.Stop();
     }
 
@@ -389,6 +399,8 @@ public sealed partial class CoreAudioPlayer : IWavePlayer, IWaveLatency, IWavePo
     public void Play()
     {
         ThrowIfInvalidOrDisposed();
+        // Count this run from its own first cycle.
+        ioProcedure.RestartFrameCount();
         ioProcedure.Start();
     }
 
@@ -397,6 +409,9 @@ public sealed partial class CoreAudioPlayer : IWavePlayer, IWaveLatency, IWavePo
     {
         ThrowIfInvalidOrDisposed();
         ioProcedure.Stop();
+        // A stop ends the playback; the next Play counts from zero.
+        positionAccumulatedBytes = 0L;
+        ioProcedure.RestartFrameCount();
         FirePlaybackStopped(new());
     }
 
