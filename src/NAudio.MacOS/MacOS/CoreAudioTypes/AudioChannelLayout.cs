@@ -50,6 +50,26 @@ internal struct AudioChannelLayout
         => ((AudioChannelLayout*)layout)->mChannelBitmap;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    // The number of channels a layout describes, whichever of the three forms
+    // it uses. Needed because kAudioDevicePropertyPreferredChannelLayout
+    // describes a whole device, which does not necessarily agree with the
+    // format of the single stream an I/O procedure is configured for.
+    public static unsafe uint GetNumberOfChannels(IntPtr layout)
+    {
+        AudioChannelLayoutTag tag = GetAudioChannelLayoutTag(layout);
+        uint high = (uint)tag >> 16;
+        if (high == ((uint)AudioChannelLayoutTag.kAudioChannelLayoutTag_UseChannelDescriptions >> 16))
+        {
+            return GetNumberOfChannelDescriptions(layout);
+        }
+        if (high == ((uint)AudioChannelLayoutTag.kAudioChannelLayoutTag_UseChannelBitmap >> 16))
+        {
+            return (uint)System.Numerics.BitOperations.PopCount((uint)GetAudioChannelBitmap(layout));
+        }
+        // Every other tag encodes its channel count in the low 16 bits.
+        return (uint)tag & 0xFFFFU;
+    }
+
     public static unsafe uint GetNumberOfChannelDescriptions(IntPtr layout)
         => ((AudioChannelLayout*)layout)->mNumberChannelDescriptions;
 
