@@ -1,4 +1,13 @@
-﻿# NAudio
+
+# macOS older HAL API implementation branch
+
+This branch retains the older macOS playback/recording support for macOS that was implemented through the Core Audio framework.
+This branch is provided for older users that still want to use this API.
+So, this old API is not expected to get any bug fixes, nor a package still utilizing
+this API will be uploaded. You are free to fork it, though, but that is solely
+at your own risk and any issues regarding this code won't be fixed.
+
+# NAudio
 
 [![GitHub](https://img.shields.io/github/license/naudio/NAudio)](https://github.com/naudio/NAudio/blob/main/LICENSE) [![Nuget](https://img.shields.io/nuget/v/NAudio)](https://www.nuget.org/packages/NAudio/) [![Build](https://github.com/naudio/NAudio/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/naudio/NAudio/actions/workflows/build.yml)
 
